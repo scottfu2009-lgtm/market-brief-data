@@ -1,0 +1,48 @@
+name: Daily Market Brief Auto Update
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # 每天迪拜时间早上7点运行（对应UTC 3点）
+  workflow_dispatch:     # 手动运行的触发选项
+
+jobs:
+  update-summary:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pandas yfinance matplotlib
+
+      - name: Generate summary
+        run: |
+          python - <<'EOF'
+          import yfinance as yf
+          import pandas as pd
+          from datetime import datetime
+          symbols = ["AMZN","GOOG","ASML","TSLA","RKLB","CRM","NIO","CRWV","NVDA","JD","HIMS","SOFI","EFX","META","PLTR","ONDS","CRCL","NFLX","QQQ","^NDX"]
+          data = {}
+          for s in symbols:
+              df = yf.download(s, period="6mo", interval="1d")[['Close','Volume']]
+              df['MA20'] = df['Close'].rolling(20).mean()
+              df['MA50'] = df['Close'].rolling(50).mean()
+              df['MA200'] = df['Close'].rolling(200).mean()
+              data[s] = df.iloc[-1].to_dict()
+          pd.DataFrame(data).T.to_csv('summary_latest.csv')
+          print("✅ Summary generated on", datetime.now())
+          EOF
+
+      - name: Commit and push results
+        run: |
+          git config --local user.name "ScottBot"
+          git config --local user.email "bot@scottfu.com"
+          git add summary_latest.csv
+          git commit -m "Auto update summary"
+          git push
